@@ -12,6 +12,9 @@
 // Check for xServer
 #include <X11/Xlib.h>
 
+// to solve frame duplicate problem 
+#define UNIQUE_FRAMES
+
 #ifdef DARKNET_FILE_PATH
 std::string darknetFilePath_ = DARKNET_FILE_PATH;
 #else
@@ -346,6 +349,16 @@ detection* YoloObjectDetector::avgPredictions(network* net, int* nboxes) {
 }
 
 void* YoloObjectDetector::detectInThread() {
+  
+  #ifdef UNIQUE_FRAMES
+  static int prevSeq;
+  // printf("In Detection1 %d == %d ? at %d \n", prevSeq, headerBuff_[(buffIndex_ + 2) % 3].seq, buffIndex_);
+  if (prevSeq==headerBuff_[(buffIndex_ + 2) % 3].seq) {
+      return 0;
+  }
+  prevSeq = headerBuff_[(buffIndex_ + 2) % 3].seq;
+  #endif
+
   running_ = 1;
   float nms = .4;
 
@@ -644,31 +657,138 @@ void YoloObjectDetector::yolo() {
 
   demoTime_ = what_time_is_it_now();
 
+  // while (!demoDone_) {
+  //   buffIndex_ = (buffIndex_ + 1) % 3;
+  //   fetch_thread = std::thread(&YoloObjectDetector::fetchInThread, this);
+  //   detect_thread = std::thread(&YoloObjectDetector::detectInThread, this);
+  //   if (!demoPrefix_) {
+  //     fps_ = 1. / (what_time_is_it_now() - demoTime_);
+  //     demoTime_ = what_time_is_it_now();
+  //     if (viewImage_) {
+  //       displayInThread(0);
+  //     } else {
+  //       generate_image(buff_[(buffIndex_ + 1) % 3], ipl_);
+  //       generate_image(buffd_[(buffIndex_ + 1) % 3], ipld_);
+  //     }
+  //     publishInThread();
+  //   } else {
+  //     char name[256];
+  //     sprintf(name, "%s_%08d", demoPrefix_, count);
+  //     save_image(buff_[(buffIndex_ + 1) % 3], name);
+  //   }
+  //   fetch_thread.join();
+  //   detect_thread.join();
+  //   ++count;
+  //   if (!isNodeRunning()) {
+  //     demoDone_ = true;
+  //   }
+  // }
+
   while (!demoDone_) {
     buffIndex_ = (buffIndex_ + 1) % 3;
     fetch_thread = std::thread(&YoloObjectDetector::fetchInThread, this);
     detect_thread = std::thread(&YoloObjectDetector::detectInThread, this);
     if (!demoPrefix_) {
-      fps_ = 1. / (what_time_is_it_now() - demoTime_);
+#ifdef UNIQUE_FRAMES
+      static int prevSeq;
+      if (prevSeq!=headerBuff_[buffIndex_].seq) {
+          fps_ = 1./(what_time_is_it_now() - demoTime_);
           demoTime_ = what_time_is_it_now();
+          prevSeq = headerBuff_[buffIndex_].seq;
+      }
+#else
+      fps_ = 1./(what_time_is_it_now() - demoTime_);
+      demoTime_ = what_time_is_it_now();
+#endif
       if (viewImage_) {
         displayInThread(0);
-      } else {
-        generate_image(buff_[(buffIndex_ + 1) % 3], ipl_);
       }
-      publishInThread();
+      publish_thread = std::thread(&YoloObjectDetector::publishInThread, this);
+      // publishInThread();
+      fetch_thread.join();
+      detect_thread.join();
+      publish_thread.join();
     } else {
       char name[256];
       sprintf(name, "%s_%08d", demoPrefix_, count);
       save_image(buff_[(buffIndex_ + 1) % 3], name);
     }
-    fetch_thread.join();
-    detect_thread.join();
     ++count;
     if (!isNodeRunning()) {
       demoDone_ = true;
     }
   }
+
+
+  // while (!demoDone_) {
+  //   ROS_DEBUG("\n[yolo] new cycle \n");
+  //   buffIndex_ = (buffIndex_ + 1) % 3;
+  //   fetch_thread = std::thread(&YoloObjectDetector::fetchInThread, this);
+
+  //   if (prevSeq_ != headerBuff_[buffIndex_].seq) {
+  //     detect_thread = std::thread(&YoloObjectDetector::detectInThread, this);
+  //     fps_ = 1./(what_time_is_it_now() - demoTime_);
+  //     demoTime_ = what_time_is_it_now();
+  //     printf("\nFPS:%.1f\n",fps_);
+
+  //     if (viewImage_) {
+  //       displayInThread(0);
+  //     }
+  //     publish_thread = std::thread(&YoloObjectDetector::publishInThread, this);
+  //     prevSeq_ = headerBuff_[buffIndex_].seq;
+
+  //     fetch_thread.join();
+  //     detect_thread.join();
+  //     publish_thread.join();
+  //     ++count;
+  //   }
+  //   else {
+  //     fetch_thread.join();  
+  //   }
+  //   if (!isNodeRunning()) {
+  //     demoDone_ = true;
+  //   }
+  // }
+
+  // while (!demoDone_) {
+  //   buffIndex_ = (buffIndex_ + 1) % 3;
+  //   fetch_thread = std::thread(&YoloObjectDetector::fetchInThread, this);
+
+  //   // Fix1: check this isn't an image already seen
+  //   printf("prevSeq: %d \n headerSeq: %d \n buffIndex: %d \n", prevSeq_, headerBuff_[buffIndex_].seq, buffIndex_);
+  //   if (prevSeq_ != headerBuff_[buffIndex_].seq) {
+  //       // Fix2: only detect if this is an image we haven't see before
+  //       detect_thread = std::thread(&YoloObjectDetector::detectInThread, this);
+
+  //       if (!demoPrefix_) {
+  //         fps_ = 1. / (what_time_is_it_now() - demoTime_);
+  //         demoTime_ = what_time_is_it_now();
+  //         if (viewImage_) {
+  //           displayInThread(0);
+  //         } else {
+  //           generate_image(buff_[(buffIndex_ + 1) % 3], ipl_);
+  //         }
+  //         publishInThread();
+  //       } else {
+  //         char name[256];
+  //         sprintf(name, "%s_%08d", demoPrefix_, count);
+  //         save_image(buff_[(buffIndex_ + 1) % 3], name);
+  //       }
+  //       // Fix3: increment the new sequence number to avoid detecting more than once
+  //       prevSeq_ = headerBuff_[buffIndex_].seq;
+  //       fetch_thread.join();
+  //       detect_thread.join();
+  //       ++count;
+  //   }
+  //   else
+  //   {
+  //     // Fix4: no detection made, so let thread execution complete so that it can be destroyed safely
+  //     fetch_thread.join();
+  //   }
+  //   if (!isNodeRunning()) {
+  //     demoDone_ = true;
+  //   }
+  // }
 }
 
 IplImageWithHeader_ YoloObjectDetector::getIplImageWithHeader() {
