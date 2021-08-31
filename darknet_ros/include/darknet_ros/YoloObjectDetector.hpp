@@ -39,6 +39,12 @@
 #include <darknet_ros_msgs/ObjectCount.h>
 #include "../../../darknet/src/blas.h"
 
+// Autoware.ai (by jwwoo)
+#include <autoware_msgs/DetectedObject.h>
+#include <autoware_msgs/DetectedObjectArray.h>
+#include <image_transport/subscriber_filter.h>
+#include <message_filters/synchronizer.h>
+#include <message_filters/sync_policies/approximate_time.h>
 
 // Darknet.
 #ifdef GPU
@@ -69,10 +75,12 @@ namespace darknet_ros_depth {
 typedef struct {
   float x, y, w, h, prob;
   int num, Class;
+  float depth;
 } RosBox_;
 
 typedef struct {
   IplImage* image;
+  IplImage* depth;
   std_msgs::Header header;
 } IplImageWithHeader_;
 
@@ -105,6 +113,8 @@ class YoloObjectDetector {
    * @param[in] msg image pointer.
    */
   void cameraCallback(const sensor_msgs::ImageConstPtr& msg);
+
+  void stereoCallback(const sensor_msgs::ImageConstPtr& msg,const sensor_msgs::ImageConstPtr& depth);
 
   /*!
    * Check for objects action goal callback.
@@ -144,9 +154,10 @@ class YoloObjectDetector {
 
   //! Advertise and subscribe to image topics.
   image_transport::ImageTransport imageTransport_;
+  image_transport::ImageTransport depthTransport_;
 
   //! ROS subscriber and publisher.
-  image_transport::Subscriber imageSubscriber_;
+  // image_transport::Subscriber imageSubscriber_;
   ros::Publisher objectPublisher_;
   ros::Publisher boundingBoxesPublisher_;
 
@@ -162,6 +173,18 @@ class YoloObjectDetector {
   //! Publisher of the bounding box image.
   ros::Publisher detectionImagePublisher_;
 
+  // ! added by jwwoo
+  image_transport::SubscriberFilter imageSubscriber_;
+  image_transport::SubscriberFilter depthSubscriber_;
+  typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image, sensor_msgs::Image> MyApproxSyncStereoPolicy;
+  message_filters::Synchronizer<MyApproxSyncStereoPolicy> *approx_sync_stereo_;
+
+  //! Detected objects for autoware msgs (jwwoo)
+  autoware_msgs::DetectedObjectArray detectedObjectsResults_;
+
+  //! And publisher (jwwoo)
+  ros::Publisher autowareDetectionPublisher_;
+
   // Yolo running on thread.
   std::thread yoloThread_;
 
@@ -173,10 +196,13 @@ class YoloObjectDetector {
   network* net_;
   std_msgs::Header headerBuff_[3];
   image buff_[3];
+  image buffd_[3];
   image buffLetter_[3];
   int buffId_[3];
   int buffIndex_ = 0;
+  int buffdIndex_ = 0;
   IplImage* ipl_;
+  IplImage* ipld_;
   float fps_ = 0;
   float demoThresh_ = 0;
   float demoHier_ = .5;
@@ -200,8 +226,11 @@ class YoloObjectDetector {
   int fullScreen_;
   char* demoPrefix_;
 
+  int prevSeq_ = -1; // for preventing duplicated frames
+
   std_msgs::Header imageHeader_;
   cv::Mat camImageCopy_;
+  cv::Mat camDepthCopy_;
   boost::shared_mutex mutexImageCallback_;
 
   bool imageStatus_ = false;
