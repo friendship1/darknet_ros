@@ -18,7 +18,7 @@ std::string darknetFilePath_ = DARKNET_FILE_PATH;
 #error Path of darknet repository is not defined in CMakeLists.txt.
 #endif
 
-namespace darknet_ros {
+namespace darknet_ros_depth {
 
 char* cfg;
 char* weights;
