@@ -5,3 +5,4 @@ int64 xmax
 int64 ymax
 int16 id
 string Class
+float64 depth
