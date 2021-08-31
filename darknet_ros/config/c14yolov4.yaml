@@ -1,0 +1,24 @@
+yolo_model:
+
+  config_file:
+    name: c14yolov4-custom.cfg
+  weight_file:
+    name: c14yolov4-custom_final.weights
+  threshold:
+    value: 0.3
+  detection_classes:
+    names:
+      - Red
+      - Yellow
+      - Green
+      - Red_arrow
+      - Yellow_arrow
+      - Green_arrow
+      - Car
+      - Bus
+      - Truck
+      - Motorcycle
+      - Person
+      - Bicyle
+      - Speed_sign
+      - Sign
